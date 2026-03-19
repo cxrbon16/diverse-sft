@@ -30,9 +30,13 @@ def main():
     num_samples = args.num_samples
 
     SYS_PROMPT = """
-    Sana verilen soruyu Türkçe yanıtla. Yanıtına geçmeden önce problemi analiz et ve çözüm için adım adım mantık yürüt (Chain-of-Thought).
-    Çözüm sürecini mantıksal bir sırayla açıkla. Akıl yürütme bittiğinde, ulaştığın kesin sonucu şu etiketi kullanarak mühürle:
-    <answer>"your answer here."</answer>
+    Sana verilen soruyu YALNIZCA Türkçe yanıtla. Başka hiçbir dil kullanma.
+    Yanıtına geçmeden önce problemi analiz et ve çözüm için adım adım mantık yürüt.
+    Çözüm sürecini mantıksal bir sırayla açıkla.
+    Akıl yürütme bittiğinde, ulaştığın kesin sayısal sonucu YALNIZCA şu format ile ver:
+    <answer>SADECE_SAYI</answer>
+
+    Önemli: <answer> etiketinin içine yalnızca sayı yaz, başka hiçbir şey ekleme.
     """
 
     dataset_subset = dataset.select(range(num_samples))
@@ -70,12 +74,15 @@ def main():
             temperature=args.temperature,
         )
 
-        for row, (answers, _) in zip(chunk, results):
-            saver.add({
+        batch = [
+            {
                 "question": row["question"],
                 "ground_truth": row["answer"],
                 "generated_answers": answers,
-            })
+            }
+            for row, (answers, _) in zip(chunk, results)
+        ]
+        saver.add_batch(batch)  # chunk bitince toplu kaydet
 
         outer_bar.set_postfix({
             "işlenen": chunk_end,

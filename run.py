@@ -82,5 +82,6 @@ def main():
             "kalan": num_samples - chunk_end,
         })
 
+    saver.save()
 if __name__ == "__main__":
     main()

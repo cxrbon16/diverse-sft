@@ -88,10 +88,11 @@ class LModel(ABC):
 
 
 class QwenLModel(LModel):
-    def __init__(self, model_id: str, n_size: int = 3, penalty: float = 5.0, **llm_kwargs):
+    def __init__(self, model_id: str, n_size: int = 3, penalty: float = 5.0, num_generations: int = 8, **llm_kwargs):
         super().__init__(model_id, **llm_kwargs)
         self.n_size = n_size
         self.penalty = penalty
+        self.num_generations = num_generations 
 
     def generate(
         self,
@@ -139,3 +140,90 @@ class QwenLModel(LModel):
 
         result = outputs[0].outputs[0]
         return result.text, list(result.token_ids)
+        
+    def generate_parallel(
+        self,
+        questions: list[str],
+        sys_prompt: str,
+        temperature: float,
+    ) -> list[tuple[list[str], list[list[int]]]]:
+        """
+        Birden fazla soruyu aynı anda işle, her sorunun generation'ları sequential.
+        Return: [(answers, token_ids_list), ...] her soru için
+        """
+        tokenizer = self.model.get_tokenizer()
+
+        # Her soru için state tut
+        states = [
+            {
+                "question": q,
+                "forbidden_ngrams": {},
+                "answers": [],
+                "token_ids_list": [],
+            }
+            for q in questions
+        ]
+
+        for gen_idx in range(self.num_generations):
+            # Bu generation round'u için tüm sorulara ait prompt + params listesi
+            prompts = []
+            sampling_params_list = []
+
+            for state in states:
+                messages = [
+                    {"role": "system", "content": sys_prompt},
+                    {"role": "user",   "content": state["question"]},
+                ]
+                prompt = tokenizer.apply_chat_template(
+                    messages, tokenize=False, add_generation_prompt=True
+                )
+                prompts.append(prompt)
+
+                # Her sorunun kendi forbidden_ngram_map'i
+                ngrams_json = json.dumps({
+                    ",".join(str(t) for t in k): v
+                    for k, v in state["forbidden_ngrams"].items()
+                    if k
+                }) if state["forbidden_ngrams"] else None
+
+                extra_args = {
+                    "ngram_n": self.n_size,
+                    "ngram_penalty": self.penalty,
+                }
+                if ngrams_json:
+                    extra_args["forbidden_ngrams_json"] = ngrams_json
+
+                sampling_params_list.append(SamplingParams(
+                    max_tokens=512,
+                    temperature=temperature,
+                    extra_args=extra_args,
+                ))
+
+            # Tüm sorular için tek batch generate
+            outputs = self.model.generate(
+                prompts=prompts,
+                sampling_params=sampling_params_list,  # her prompt'a ayrı params
+                use_tqdm=False,
+            )
+
+            # Sonuçları state'lere yaz, n-gram'ları güncelle
+            for state, output in zip(states, outputs):
+                result = output.outputs[0]
+                content = result.text
+                token_ids = list(result.token_ids)
+
+                state["answers"].append(content)
+                state["token_ids_list"].append(token_ids)
+
+                # N-gram güncelle
+                n = self.n_size
+                if len(token_ids) >= n:
+                    for j in range(len(token_ids) - n + 1):
+                        prefix = tuple(token_ids[j: j + n - 1])
+                        target = token_ids[j + n - 1]
+                        if prefix not in state["forbidden_ngrams"]:
+                            state["forbidden_ngrams"][prefix] = []
+                        if target not in state["forbidden_ngrams"][prefix]:
+                            state["forbidden_ngrams"][prefix].append(target)
+
+        return [(s["answers"], s["token_ids_list"]) for s in states]

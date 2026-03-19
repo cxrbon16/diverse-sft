@@ -71,7 +71,7 @@ class LModel(ABC):
             dtype="auto",
             max_model_len=4096,
             max_num_seqs=32,
-            gpu_memory_utilization=0.85,
+            gpu_memory_utilization=0.95,
             logits_processors=[NGramAdapterLogitsProcessor],
             **llm_kwargs,
         )

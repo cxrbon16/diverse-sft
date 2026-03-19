@@ -56,6 +56,7 @@ class NGramAdapterLogitsProcessor(AdapterLogitsProcessor):
         forbidden_ngrams = {
             tuple(int(x) for x in k.split(",")): v
             for k, v in raw.items()
+            if k
         }
 
         return _NGramRequestProcessor(forbidden_ngrams, n=n, penalty=penalty)
@@ -114,6 +115,7 @@ class QwenLModel(LModel):
         ngrams_json = json.dumps({
             ",".join(str(t) for t in k): v
             for k, v in forbidden_ngram_map.items()
+            if len(k) > 0
         }) if forbidden_ngram_map else None
 
         extra_args: dict = {

@@ -11,7 +11,7 @@ def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--dataset", type=str, default="ytu-ce-cosmos/gsm8k_tr")
     parser.add_argument("--num_samples", type=int, default=1000)
-    parser.add_argument("--num_generations", type=int, default=5)
+    parser.add_argument("--num_generations", type=int, default=8)
     parser.add_argument("--model_id", type=str, default="Qwen/Qwen3.5-0.8B")
     parser.add_argument("--n_size", type=int, default=3)
     parser.add_argument("--penalty", type=float, default=0.0)
